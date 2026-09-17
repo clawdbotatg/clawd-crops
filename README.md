@@ -8,8 +8,12 @@ silicon and an X.509 certificate for that key signed by Infineon. The contract h
 against Infineon's CA public key, records the chip's key, and from then on can say "yes, a real Trust M
 signed this hash".
 
-Live on mainnet: [`0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99`](https://etherscan.io/address/0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99#code),
-with one chip attested. Its factory certificate is in the test.
+Live on mainnet: [`0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99`](https://etherscan.io/address/0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99#code)
+(verified source), with one chip attested
+([tx](https://etherscan.io/tx/0xcddd64a65cd728366350b04758643d560fcdd6a0d4888b5e619d0c3076206484)). Its factory
+certificate is in the test. dApp: [clawd-trust-m.vercel.app](https://clawd-trust-m.vercel.app).
+
+![the dApp verifying a chip signature against mainnet](docs/dapp-verified.png)
 
 ## How the proof works
 
@@ -57,21 +61,35 @@ covers OpenApplication, GetDataObject, CalcSign, GetRandom. Chip address 0x30.
 ## Run it
 
 ```
-# chip side, Pico on USB
+# chip side, Pico on USB (MicroPython flashed; the driver is copied over on every run)
 pip install mpremote "eth-hash[pycryptodome]"
 tools/chip.py uid              # chip serial
 tools/chip.py cert             # factory certificate + the attest() arguments, as JSON
 tools/chip.py sign "hello"     # sign keccak256("hello") with the factory key, as JSON
 
+# check that signature on mainnet without the dApp
+cast call 0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99 \
+  "isChipSignature(bytes32,bytes32,bytes32,bytes32,bytes32)(bool)" $chipX $chipY $hash $r $s \
+  --rpc-url https://eth-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY
+
 # contracts
 cd packages/foundry && forge test     # uses the real certificate and a real chip signature
 
 # dApp
-yarn install && yarn start            # paste the JSON from chip.py into the page
+yarn install && yarn start            # http://localhost:3000, paste the JSON from chip.py into the page
 ```
 
+Setup: put `ALCHEMY_API_KEY` (and `ETHERSCAN_API_KEY` for verification) in `packages/foundry/.env` and
+`NEXT_PUBLIC_ALCHEMY_API_KEY` in `packages/nextjs/.env.local`, both gitignored. `yarn start` honours a
+`PORT` env var; if something else already sets one, run `yarn workspace @se-2/nextjs dev -p 3000`.
+
 The page has two boxes: paste `sign` output to verify a signature against mainnet, paste `cert` output to
-attest a new chip (one transaction, needs a wallet).
+attest a new chip (one transaction, needs a wallet). It is deployed at
+[clawd-trust-m.vercel.app](https://clawd-trust-m.vercel.app); redeploy with `yarn vercel:yolo --prod`.
+
+Pico notes: `chip.py` picks the first `/dev/cu.usbmodem*`; pin it with `PICO_PORT=`. Give the board a
+couple of seconds between back-to-back runs. If a run dies with "Device not configured" the Pico is
+re-enumerating on USB; wait ten seconds and run it again, nothing on the chip is affected.
 
 To deploy elsewhere: `yarn deploy --network <chain>`. The deploy script pins CA 101; if your chip's
 certificate names a different issuer (CA 300 is common on newer chips), put that CA's public key in
@@ -86,6 +104,7 @@ firmware/trustm.py                     MicroPython driver: bus rules, link layer
 tools/chip.py                          Mac/Linux side: uid, cert, sign, via mpremote
 packages/foundry/contracts/TrustMAttest.sol
 packages/foundry/test/TrustMAttest.t.sol   real cert, real signature, tamper cases
+packages/foundry/script/DeployTrustMAttest.s.sol   pins the CA 101 public key
 packages/nextjs/app/page.tsx           verify / attest page
 SKILL.md                               how an agent uses this
 ```

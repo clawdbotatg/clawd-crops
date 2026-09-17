@@ -21,3 +21,6 @@ node_modules
 
 # cli
 dist
+
+# vercel link (deploy from the repo root, rootDirectory=packages/nextjs)
+.vercel
