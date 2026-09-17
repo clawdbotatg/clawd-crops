@@ -1,83 +1,93 @@
-# 🏗 Scaffold-ETH 2
+# clawd-trust-m
 
-<h4 align="center">
-  <a href="https://docs.scaffoldeth.io">Documentation</a> |
-  <a href="https://scaffoldeth.io">Website</a>
-</h4>
+Prove on chain that a signature came from a real chip, not software.
 
-🧪 An open-source, up-to-date toolkit for building decentralized applications (dapps) on the Ethereum blockchain. It's designed to make it easier for developers to create and deploy smart contracts and build user interfaces that interact with those contracts.
+The chip is an Infineon OPTIGA Trust M on an [Adafruit breakout](https://www.adafruit.com/product/4351),
+driven by a Raspberry Pi Pico. Every Trust M leaves the factory with a P-256 key that never leaves the
+silicon and an X.509 certificate for that key signed by Infineon. The contract here checks that certificate
+against Infineon's CA public key, records the chip's key, and from then on can say "yes, a real Trust M
+signed this hash".
 
-> [!NOTE]
-> 🤖 Scaffold-ETH 2 is AI-ready! It has everything agents need to build on Ethereum. Check `.agents/`, `.claude/`, `.opencode` or `.cursor/` for more info.
+Live on mainnet: [`0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99`](https://etherscan.io/address/0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99#code),
+with one chip attested. Its factory certificate is in the test.
 
-⚙️ Built using NextJS, RainbowKit, Foundry, Wagmi, Viem, and Typescript.
-
-- ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
-- 🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
-- 🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
-- 🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
-- 🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
-
-![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
-
-## Requirements
-
-Before you begin, you need to install the following tools:
-
-- [Node (>= v20.18.3)](https://nodejs.org/en/download/)
-- Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
-- [Git](https://git-scm.com/downloads)
-
-## Quickstart
-
-To get started with Scaffold-ETH 2, follow the steps below:
-
-1. Install dependencies if it was skipped in CLI:
+## How the proof works
 
 ```
-cd my-dapp-example
-yarn install
+Infineon ECC Root CA
+  └─ signs  Infineon OPTIGA(TM) Trust M CA 101        (public key pinned in the contract)
+       └─ signs  the chip's factory certificate        (slot E0E0, read off the chip)
+            └─ holds the chip's public key              (slot E0F0, private half never leaves the chip)
+                 └─ signs  your hash                    (CalcSign over I2C)
 ```
 
-2. Run a local network in the first terminal:
+`attest(cert, ...)` hashes the certificate body with SHA-256 and checks the CA's ECDSA signature with the
+P-256 precompile (RIP-7212 / EIP-7951, live on mainnet and the L2s; OpenZeppelin's library falls back to
+Solidity elsewhere). It pulls the public key out of the signed bytes and records it. `isChipSignature(x, y,
+hash, r, s)` is then a P-256 check against a recorded key. About 65k gas to attest, a view call to verify.
+
+Limits, plainly: this proves the chip is genuine Infineon silicon. It does not prove who owns the chip, and
+the factory certificate says "Infineon IoT Node", nothing about you.
+
+## Hardware
+
+- Raspberry Pi Pico (any RP2040 or RP2350 board) with MicroPython.
+- Adafruit Infineon Trust M breakout, product 4351.
+- A STEMMA QT / Qwiic cable, four wires: GND, 3V3, SDA, SCL.
+
+Wire GND to a Pico GND pin, V+ to 3V3 OUT (pin 36), SDA to GP4 (pin 6), SCL to GP5 (pin 7). Other pins
+work too: `trustm.bus(sda=, scl=)`.
+
+Do not trust wire colours. Adafruit's cables are black GND, red V+, blue SDA, yellow SCL, but other
+cables differ (the ones used here are white GND, yellow V+, black SDA, red SCL). Check with a meter
+from the wire end to the labelled hole on the breakout. A data wire on the 3V3 pin looks like a short
+because the chip's protection diode feeds power back through it.
+
+## The bus, or why an I2C scan finds nothing
+
+The Trust M does not acknowledge its address while asleep or busy. Infineon's driver retries every 1 ms,
+up to 200 times. It also needs a 50 µs guard time between one transaction's STOP and the next START; a
+read issued straight after a write is refused. `firmware/trustm.py` does both. A plain `I2C.scan()` tries
+once and reports an empty bus, which is not a wiring problem.
+
+The wire protocol is Infineon's "IFX I2C": registers at 0x80 (data), 0x82 (state), 0x88 (soft reset), a
+data-link layer with 2-bit frame numbers and a CRC-16 (poly 0x8408, init 0), and APDUs on top. The driver
+covers OpenApplication, GetDataObject, CalcSign, GetRandom. Chip address 0x30.
+
+## Run it
 
 ```
-yarn chain
+# chip side, Pico on USB
+pip install mpremote "eth-hash[pycryptodome]"
+tools/chip.py uid              # chip serial
+tools/chip.py cert             # factory certificate + the attest() arguments, as JSON
+tools/chip.py sign "hello"     # sign keccak256("hello") with the factory key, as JSON
+
+# contracts
+cd packages/foundry && forge test     # uses the real certificate and a real chip signature
+
+# dApp
+yarn install && yarn start            # paste the JSON from chip.py into the page
 ```
 
-This command starts a local Ethereum network using Foundry. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/foundry/foundry.toml`.
+The page has two boxes: paste `sign` output to verify a signature against mainnet, paste `cert` output to
+attest a new chip (one transaction, needs a wallet).
 
-3. On a second terminal, deploy the test contract:
+To deploy elsewhere: `yarn deploy --network <chain>`. The deploy script pins CA 101; if your chip's
+certificate names a different issuer (CA 300 is common on newer chips), put that CA's public key in
+`DeployTrustMAttest.s.sol`. Infineon publishes the CA certificates in the
+[optiga-trust-m](https://github.com/Infineon/optiga-trust-m/tree/develop/certificates) repo (CA 300, root)
+and [pred-main-xmc4700-kit](https://github.com/Infineon/pred-main-xmc4700-kit/tree/master/amazon-freertos/vendors/infineon/secure_elements/optiga_trust_m/certificates) (CA 101).
+
+## Layout
 
 ```
-yarn deploy
+firmware/trustm.py                     MicroPython driver: bus rules, link layer, commands
+tools/chip.py                          Mac/Linux side: uid, cert, sign, via mpremote
+packages/foundry/contracts/TrustMAttest.sol
+packages/foundry/test/TrustMAttest.t.sol   real cert, real signature, tamper cases
+packages/nextjs/app/page.tsx           verify / attest page
+SKILL.md                               how an agent uses this
 ```
 
-This command deploys a test smart contract to the local network. The contract is located in `packages/foundry/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/foundry/script` to deploy the contract to the network. You can also customize the deploy script.
-
-4. On a third terminal, start your NextJS app:
-
-```
-yarn start
-```
-
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
-
-Run smart contract test with `yarn foundry:test`
-
-- Edit your smart contracts in `packages/foundry/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/foundry/script`
-
-
-## Documentation
-
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Scaffold-ETH 2.
-
-To know more about its features, check out our [website](https://scaffoldeth.io).
-
-## Contributing to Scaffold-ETH 2
-
-We welcome contributions to Scaffold-ETH 2!
-
-Please see [CONTRIBUTING.MD](https://github.com/scaffold-eth/scaffold-eth-2/blob/main/CONTRIBUTING.md) for more information and guidelines for contributing to Scaffold-ETH 2.
+Built with [Scaffold-ETH 2](https://scaffoldeth.io). MIT.

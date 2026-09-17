@@ -1,0 +1,50 @@
+---
+name: trust-m-attest
+description: Sign with an Infineon OPTIGA Trust M chip on a Pico and prove on chain that the signature came from real silicon. Use for "sign this with the chip", "is this signature from the chip", "attest a new Trust M", or any Trust M / IFX I2C question.
+---
+
+# Trust M attestation
+
+## What you have
+
+- `firmware/trustm.py`: MicroPython driver. `trustm.bus()` then `trustm.Session()` (soft reset +
+  OpenApplication). Session methods: `get(oid)`, `get_all(oid)`, `metadata(oid)`, `sign(oid, digest32)`,
+  `random(n)`, `command(cmd, param, data)`.
+- `tools/chip.py`: run from the host with the Pico on USB. `uid`, `cert`, `sign "text"`, `sign 0x<hash>`.
+  Prints JSON the dApp and the contract take as is.
+- `TrustMAttest` on mainnet at `0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99`. `attest(...)` once per
+  chip, `isChipSignature(x, y, hash, r, s)` any time.
+
+## Rules that are not obvious
+
+1. An I2C scan shows nothing. The chip NACKs while asleep or busy. Retry on NACK (1 ms, up to 200x) and
+   keep 50 µs between transactions. The driver does this; do not "debug the wiring" from a scan.
+2. Check wire colours with a meter, not by convention. See README.
+3. `Session()` resets the chip; frame numbers restart. Make one session per job.
+4. The factory key is slot 0xE0F0, its certificate 0xE0E0. Both are read-only forever. Slots 0xE0F1 to
+   0xE0F3 are free for your own keys (GenKeyPair, command 0x38, not in the driver yet).
+5. ECDSA signatures may have high s. `chip.py` folds s to N-s; the contract does too.
+6. `sign` takes a 32-byte digest and signs it as is. Use keccak256 for Ethereum.
+
+## Prove a signature on chain
+
+```
+tools/chip.py sign "hello"    -> {hash, r, s, chipX, chipY}
+cast call 0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99 \
+  "isChipSignature(bytes32,bytes32,bytes32,bytes32,bytes32)(bool)" $chipX $chipY $hash $r $s \
+  --rpc-url $MAINNET_RPC
+```
+
+## Attest a new chip
+
+```
+tools/chip.py cert            -> {issuer, chipX, chipY, attest:{cert, tbsStart, tbsLen, pkOffset, r, s}}
+```
+If `issuer` is not "Trust M CA 101", deploy a new contract with that CA's key (see README). Then send
+`attest(cert, tbsStart, tbsLen, pkOffset, r, s)` from any wallet, or paste the JSON into the dApp.
+
+## Don't
+
+- Don't run anything that writes chip metadata or lifecycle (SetObjectProtected, lifecycle changes) without
+  reading the object back first and getting an explicit yes. Lifecycle only moves forward.
+- Don't use public RPCs. Alchemy with a key.
