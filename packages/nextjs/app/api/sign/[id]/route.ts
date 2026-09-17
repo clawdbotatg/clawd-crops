@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { get, put } from "~~/utils/signQueue";
+import { isChipSignature } from "~~/utils/verifyOnChain";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,11 @@ export async function POST(req: Request, { params }: Params) {
     r.verdict = body.verdict;
   } else if (hex32(body.r) && hex32(body.s) && hex32(body.chipX) && hex32(body.chipY)) {
     Object.assign(r, { status: "signed", r: body.r, s: body.s, chipX: body.chipX, chipY: body.chipY });
+    try {
+      r.verdict = await isChipSignature({ chipX: body.chipX, chipY: body.chipY, hash: r.hash, r: body.r, s: body.s });
+    } catch (e) {
+      console.error("mainnet check failed", e); // the page still runs its own read; the Pico waits for a verdict
+    }
   } else {
     return NextResponse.json({ error: "expected {r,s,chipX,chipY}, {refused:true} or {verdict}" }, { status: 400 });
   }

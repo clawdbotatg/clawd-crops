@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import type { NextPage } from "next";
 import { encodeAbiParameters, keccak256 } from "viem";
-import { useDeployedContractInfo, useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import deployedContracts from "~~/contracts/deployedContracts";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+const CONTRACT = deployedContracts[1].TrustMAttest.address;
 
 type Sig = {
   message?: string;
@@ -55,8 +58,7 @@ const Home: NextPage = () => {
   const [message, setMessage] = useState("hello world");
   const [asking, setAsking] = useState<Pending | undefined>();
   const [askError, setAskError] = useState("");
-  const verdictPosted = useRef<string | undefined>(undefined);
-  const lastReq = useRef<string | undefined>(undefined);
+  const [serverVerdict, setServerVerdict] = useState<boolean | undefined>(); // what the queue saw on mainnet
   useEffect(() => {
     const load = () => {
       const s = sigFromUrl();
@@ -90,7 +92,7 @@ const Home: NextPage = () => {
       const j = await r.json();
       if (j.status === "signed") {
         const s: Sig = { message: j.message, hash: j.hash, r: j.r, s: j.s, chipX: j.chipX, chipY: j.chipY };
-        lastReq.current = asking.id;
+        setServerVerdict(typeof j.verdict === "boolean" ? j.verdict : undefined);
         setSigText(JSON.stringify(s));
         window.location.hash = "sig=" + encodeURIComponent(JSON.stringify(s));
         setAsking(undefined);
@@ -104,9 +106,7 @@ const Home: NextPage = () => {
 
   const sig = parse<Sig>(sigText);
   const cert = parse<Cert>(certText);
-  const { data: contract } = useDeployedContractInfo({ contractName: "TrustMAttest" });
-
-  const { data: verdict, isFetching } = useScaffoldReadContract({
+  const { data: chainVerdict, isFetching } = useScaffoldReadContract({
     contractName: "TrustMAttest",
     functionName: "isChipSignature",
     args: sig
@@ -128,18 +128,9 @@ const Home: NextPage = () => {
   });
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "TrustMAttest" });
 
+  // The browser's own read wins when it works; otherwise the queue's server-side read (blocked RPCs, no wallet).
+  const verdict = chainVerdict ?? serverVerdict;
   const settled = sig && !isFetching && verdict !== undefined;
-  // Tell the queue what mainnet said, so the Pico can put REAL CHIP on its screen.
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("req") ?? lastReq.current;
-    if (!settled || !id || verdictPosted.current === id) return;
-    verdictPosted.current = id;
-    fetch(`/api/sign/${id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ verdict: !!verdict }),
-    }).catch(() => undefined);
-  }, [settled, verdict]);
   const step = (ok: boolean | undefined) => (ok === undefined ? "○" : ok ? "✓" : "✗");
 
   return (
@@ -153,7 +144,7 @@ const Home: NextPage = () => {
         </p>
         <div className="flex justify-center items-center gap-2 mt-2 text-sm">
           <span>Contract:</span>
-          <Address address={contract?.address} />
+          <Address address={CONTRACT} />
         </div>
       </div>
 
@@ -164,7 +155,7 @@ const Home: NextPage = () => {
               <div className="text-sm opacity-70">The chip signed</div>
               <div className="text-3xl font-mono font-bold break-words">&quot;{sig.message ?? "(hash only)"}&quot;</div>
               <div className="font-mono text-xs opacity-70 break-all">keccak256 {sig.hash}</div>
-              {isFetching || verdict === undefined ? (
+              {verdict === undefined ? (
                 <div className="flex items-center gap-2">
                   <span className="loading loading-spinner" /> asking mainnet…
                 </div>
