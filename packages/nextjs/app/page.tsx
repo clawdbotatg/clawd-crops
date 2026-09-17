@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Address } from "@scaffold-ui/components";
 import type { NextPage } from "next";
 import { encodeAbiParameters, keccak256 } from "viem";
@@ -47,9 +47,16 @@ const sigFromUrl = () => {
   return m ? decodeURIComponent(m[1]) : "";
 };
 
+type Pending = { id: string; message: string; hash: `0x${string}` };
+
 const Home: NextPage = () => {
   const [sigText, setSigText] = useState("");
   const [certText, setCertText] = useState("");
+  const [message, setMessage] = useState("hello world");
+  const [asking, setAsking] = useState<Pending | undefined>();
+  const [askError, setAskError] = useState("");
+  const verdictPosted = useRef<string | undefined>(undefined);
+  const lastReq = useRef<string | undefined>(undefined);
   useEffect(() => {
     const load = () => {
       const s = sigFromUrl();
@@ -59,6 +66,41 @@ const Home: NextPage = () => {
     window.addEventListener("hashchange", load);
     return () => window.removeEventListener("hashchange", load);
   }, []);
+
+  // Ask the chip: POST the message, then poll until the Pico signs or refuses.
+  const ask = async () => {
+    setAskError("");
+    try {
+      const res = await fetch("/api/sign", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+      setAsking(await res.json());
+    } catch (e) {
+      setAskError(`could not reach the queue: ${(e as Error).message}`);
+    }
+  };
+  useEffect(() => {
+    if (!asking) return;
+    const t = setInterval(async () => {
+      const r = await fetch(`/api/sign/${asking.id}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.status === "signed") {
+        const s: Sig = { message: j.message, hash: j.hash, r: j.r, s: j.s, chipX: j.chipX, chipY: j.chipY };
+        lastReq.current = asking.id;
+        setSigText(JSON.stringify(s));
+        window.location.hash = "sig=" + encodeURIComponent(JSON.stringify(s));
+        setAsking(undefined);
+      } else if (j.status === "refused") {
+        setAskError("refused on the chip");
+        setAsking(undefined);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [asking]);
 
   const sig = parse<Sig>(sigText);
   const cert = parse<Cert>(certText);
@@ -87,6 +129,17 @@ const Home: NextPage = () => {
   const { writeContractAsync, isMining } = useScaffoldWriteContract({ contractName: "TrustMAttest" });
 
   const settled = sig && !isFetching && verdict !== undefined;
+  // Tell the queue what mainnet said, so the Pico can put REAL CHIP on its screen.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("req") ?? lastReq.current;
+    if (!settled || !id || verdictPosted.current === id) return;
+    verdictPosted.current = id;
+    fetch(`/api/sign/${id}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ verdict: !!verdict }),
+    }).catch(() => undefined);
+  }, [settled, verdict]);
   const step = (ok: boolean | undefined) => (ok === undefined ? "○" : ok ? "✓" : "✗");
 
   return (
@@ -144,22 +197,41 @@ const Home: NextPage = () => {
           ) : (
             <>
               <h2 className="card-title">Sign something with the chip</h2>
-              <p className="m-0 text-sm">
-                Pico on USB, hat on: run <code>tools/chip.py ui &quot;hello world&quot;</code>. The screen shows the
-                text, you press <b>A</b>, the chip signs, and this page opens with the answer. Or paste the JSON from{" "}
-                <code>tools/chip.py sign &quot;hello world&quot;</code> here.
-              </p>
-              <textarea
-                className="textarea textarea-bordered font-mono text-xs h-32"
-                placeholder='{"message":"hello world","hash":"0x..","r":"0x..","s":"0x..","chipX":"0x..","chipY":"0x.."}'
-                value={sigText}
-                onChange={e => setSigText(e.target.value)}
-              />
-              {sigText && !sig && <div className="text-error text-sm">not valid JSON</div>}
+              <div className="flex gap-2">
+                <input
+                  className="input input-bordered grow font-mono"
+                  value={message}
+                  maxLength={200}
+                  onChange={e => setMessage(e.target.value)}
+                  disabled={!!asking}
+                />
+                <button className="btn btn-primary" onClick={ask} disabled={!!asking || !message.trim()}>
+                  {asking ? <span className="loading loading-spinner" /> : "Ask the chip to sign"}
+                </button>
+              </div>
+              {asking && (
+                <div className="alert">
+                  Sent to the Pico. It shows &quot;{asking.message}&quot; on its screen. Press <b>A</b> there.
+                </div>
+              )}
+              {askError && <div className="alert alert-error">{askError}</div>}
             </>
           )}
         </div>
       </section>
+
+      <details className="collapse collapse-arrow bg-base-100 shadow w-full">
+        <summary className="collapse-title font-semibold">Paste a signature from tools/chip.py sign</summary>
+        <div className="collapse-content flex flex-col gap-2">
+          <textarea
+            className="textarea textarea-bordered font-mono text-xs h-32"
+            placeholder='{"message":"hello world","hash":"0x..","r":"0x..","s":"0x..","chipX":"0x..","chipY":"0x.."}'
+            value={sigText}
+            onChange={e => setSigText(e.target.value)}
+          />
+          {sigText && !sig && <div className="text-error text-sm">not valid JSON</div>}
+        </div>
+      </details>
 
       <details className="collapse collapse-arrow bg-base-100 shadow w-full">
         <summary className="collapse-title font-semibold">Attest a new chip (once per chip)</summary>

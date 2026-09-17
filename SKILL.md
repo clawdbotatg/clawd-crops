@@ -15,6 +15,10 @@ description: Sign with an Infineon OPTIGA Trust M chip on a Pico and prove on ch
   hash; `--auto` skips the button), `uid`, `cert`, `sign "text"`, `sign 0x<hash>`. Prints JSON the dApp
   and the contract take as is.
 - `firmware/ui.py` + `firmware/lcd.py`: the screens. `ui.run(text, digest)` returns `(r, s)` or None.
+- `firmware/agent.py` (run by `main.py`): WiFi + polls `TRUSTM_RELAY/api/sign` (from `secrets.py`), shows the
+  request, signs on A, POSTs `{r,s,chipX,chipY}` to `/api/sign/<id>`, then polls for `verdict`. The queue is
+  `packages/nextjs/app/api/sign` + `utils/signQueue.ts` (memory, or Upstash when the env vars are set).
+  The board also carries `main_picowallet.py`, the previous boot file; swap them back to get picowallet.
 - `TrustMAttest` on mainnet at `0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99`. `attest(...)` once per
   chip, `isChipSignature(x, y, hash, r, s)` any time.
 

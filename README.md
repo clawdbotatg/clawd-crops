@@ -60,7 +60,22 @@ covers OpenApplication, GetDataObject, CalcSign, GetRandom. Chip address 0x30.
 
 ## Run it
 
-The short way, with a [Waveshare Pico-LCD-1.3](https://www.waveshare.com/wiki/Pico-LCD-1.3) hat on the Pico:
+With a [Waveshare Pico-LCD-1.3](https://www.waveshare.com/wiki/Pico-LCD-1.3) hat on a Pico W, the whole thing is
+a button on a web page and a button on the hat:
+
+```
+yarn install && yarn start        # the page + the queue, on a laptop the Pico can reach
+```
+
+Put `TRUSTM_RELAY = "http://<laptop ip>:3000"` plus `WIFI_SSID` / `WIFI_PASS` in `secrets.py` on the Pico and copy
+`firmware/*.py` over (`mpremote cp firmware/*.py :`). `main.py` runs `agent.py`: it joins WiFi and polls the
+queue. Open the page, type a message, press **Ask the chip to sign**. The hat shows the text and its hash. Press
+**A**. The chip signs, the signature goes back to the page, the page asks mainnet, goes green, and tells the
+hat, which shows REAL CHIP. **B** refuses. Everything stays on your LAN; the hosted copy at
+[clawd-trust-m.vercel.app](https://clawd-trust-m.vercel.app) has no queue unless you give it
+`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
+
+Over USB instead, no WiFi:
 
 ```
 pip install mpremote "eth-hash[pycryptodome]"
@@ -116,13 +131,16 @@ and [pred-main-xmc4700-kit](https://github.com/Infineon/pred-main-xmc4700-kit/tr
 
 ```
 firmware/trustm.py                     MicroPython driver: bus rules, link layer, commands
+firmware/agent.py                      boot loop: WiFi, poll the queue, sign on A, post back, show verdict
+firmware/main.py                       runs agent.py
 firmware/ui.py                         the hat: show text, sign on A, refuse on B, show the verdict
 firmware/lcd.py                        Pico-LCD-1.3 driver (ST7789 + keys)
 tools/chip.py                          Mac/Linux side: ui, sign, cert, uid, via mpremote
 packages/foundry/contracts/TrustMAttest.sol
 packages/foundry/test/TrustMAttest.t.sol   real cert, real signature, tamper cases
 packages/foundry/script/DeployTrustMAttest.s.sol   pins the CA 101 public key
-packages/nextjs/app/page.tsx           verify / attest page
+packages/nextjs/app/page.tsx           the page: ask the chip, verify, attest
+packages/nextjs/app/api/sign/          the queue the Pico polls (in memory, or Upstash)
 SKILL.md                               how an agent uses this
 ```
 
