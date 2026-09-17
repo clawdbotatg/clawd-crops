@@ -9,6 +9,7 @@ from lcd import LCD, Keys, BLACK, WHITE, RED, GREEN, GREY, DARK, YELLOW
 import trustm
 
 KEY_OID = 0xE0F0
+session = None     # the Session run() opened; the host's earlier session is dead after that reset
 d = None
 keys = None
 
@@ -118,6 +119,7 @@ def refused(text):
 
 
 def verdict(text, ok):
+    _init()                                          # called from a fresh exec on the host, after run()
     c = GREEN if ok else RED
     _header("MAINNET", c)
     _message(text, 30, 70)
@@ -142,9 +144,10 @@ def run(text, digest, timeout_ms=300000, autosign=False):
             refused(text)
             return None
         time.sleep_ms(20)
+    global session
     busy(text)
     trustm.bus()
-    s = trustm.Session()                             # fresh session: the chip may have been idle for minutes
-    r, sg = s.sign(KEY_OID, digest)
+    session = trustm.Session()                       # fresh session: the chip may have been idle for minutes
+    r, sg = session.sign(KEY_OID, digest)
     signed(text, r, sg)
     return r, sg

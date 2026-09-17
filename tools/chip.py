@@ -144,7 +144,7 @@ def is_chip_signature(sig):
 def ui(msg="hello world", auto=False):
     h = keccak(msg.encode())
     out = run("import ui\nr = ui.run(%r, bytes.fromhex('%s'), autosign=%r)\n"
-              "print('OUT', 'refused' if r is None else '%%064x%%064x' %% r + ' ' + s.get_all(0xE0E0).hex())"
+              "print('OUT', 'refused' if r is None else '%%064x%%064x' %% r + ' ' + ui.session.get_all(0xE0E0).hex())"
               % (msg, h.hex(), auto), timeout=330)
     if out == "refused":
         sys.exit("refused on the Pico, nothing signed")
