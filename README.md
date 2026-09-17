@@ -60,9 +60,21 @@ covers OpenApplication, GetDataObject, CalcSign, GetRandom. Chip address 0x30.
 
 ## Run it
 
+The short way, with a [Waveshare Pico-LCD-1.3](https://www.waveshare.com/wiki/Pico-LCD-1.3) hat on the Pico:
+
 ```
-# chip side, Pico on USB (MicroPython flashed; the driver is copied over on every run)
 pip install mpremote "eth-hash[pycryptodome]"
+tools/chip.py ui "hello world"
+```
+
+The screen shows the text and its keccak256. Press **A**. The chip signs, the tool checks the signature
+against the mainnet contract, the screen says REAL CHIP or REJECTED, and the dApp opens in your browser
+with the signature already in the URL and the verdict on the page. Press **B** to refuse. Nothing is pasted.
+
+Without the hat, piece by piece:
+
+```
+# chip side, Pico on USB (MicroPython flashed; the firmware is copied over on every run)
 tools/chip.py uid              # chip serial
 tools/chip.py cert             # factory certificate + the attest() arguments, as JSON
 tools/chip.py sign "hello"     # sign keccak256("hello") with the factory key, as JSON
@@ -87,7 +99,10 @@ The page has two boxes: paste `sign` output to verify a signature against mainne
 attest a new chip (one transaction, needs a wallet). It is deployed at
 [clawd-trust-m.vercel.app](https://clawd-trust-m.vercel.app); redeploy with `yarn vercel:yolo --prod`.
 
-Pico notes: `chip.py` picks the first `/dev/cu.usbmodem*`; pin it with `PICO_PORT=`. Give the board a
+Pico notes: `chip.py` picks the first `/dev/cu.usbmodem*`; pin it with `PICO_PORT=`. If another loop on
+the Pico shares the I2C bus (the picowallet firmware polls an ATECC608 on the same pins), the tool stops
+it first; a Trust M that acks its address but refuses every write is stuck mid-transaction and needs a
+power cycle (unplug the USB). Give the board a
 couple of seconds between back-to-back runs. If a run dies with "Device not configured" the Pico is
 re-enumerating on USB; wait ten seconds and run it again, nothing on the chip is affected.
 
@@ -101,7 +116,9 @@ and [pred-main-xmc4700-kit](https://github.com/Infineon/pred-main-xmc4700-kit/tr
 
 ```
 firmware/trustm.py                     MicroPython driver: bus rules, link layer, commands
-tools/chip.py                          Mac/Linux side: uid, cert, sign, via mpremote
+firmware/ui.py                         the hat: show text, sign on A, refuse on B, show the verdict
+firmware/lcd.py                        Pico-LCD-1.3 driver (ST7789 + keys)
+tools/chip.py                          Mac/Linux side: ui, sign, cert, uid, via mpremote
 packages/foundry/contracts/TrustMAttest.sol
 packages/foundry/test/TrustMAttest.t.sol   real cert, real signature, tamper cases
 packages/foundry/script/DeployTrustMAttest.s.sol   pins the CA 101 public key
