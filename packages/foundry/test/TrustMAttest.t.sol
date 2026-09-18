@@ -24,7 +24,12 @@ contract TrustMAttestTest is Test {
     TrustMAttest a;
 
     function setUp() public {
-        a = new TrustMAttest(CA_X, CA_Y);
+        a = new TrustMAttest();
+    }
+
+    function testPinsInfineonCA101() public view {
+        assertEq(a.CA_X(), CA_X);
+        assertEq(a.CA_Y(), CA_Y);
     }
 
     function testAttestRealChip() public {
@@ -51,11 +56,6 @@ contract TrustMAttestTest is Test {
         a.attest(cert, TBS_START, TBS_LEN, PK_OFFSET, CERT_R, CERT_S);
     }
 
-    function testWrongCAFails() public {
-        TrustMAttest b = new TrustMAttest(CHIP_X, CHIP_Y);
-        vm.expectRevert(TrustMAttest.CertNotSignedByCA.selector);
-        b.attest(CERT, TBS_START, TBS_LEN, PK_OFFSET, CERT_R, CERT_S);
-    }
 
     function testKeyOffsetMustBeTheSPKI() public {
         vm.expectRevert(TrustMAttest.NotP256Key.selector);

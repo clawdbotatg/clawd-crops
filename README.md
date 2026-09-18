@@ -121,9 +121,9 @@ power cycle (unplug the USB). Give the board a
 couple of seconds between back-to-back runs. If a run dies with "Device not configured" the Pico is
 re-enumerating on USB; wait ten seconds and run it again, nothing on the chip is affected.
 
-To deploy elsewhere: `yarn deploy --network <chain>`. The deploy script pins CA 101; if your chip's
-certificate names a different issuer (CA 300 is common on newer chips), put that CA's public key in
-`DeployTrustMAttest.s.sol`. Infineon publishes the CA certificates in the
+To deploy elsewhere: `yarn deploy --network <chain>`. Infineon's CA 101 public key is hardcoded in the contract
+(`CA_X` / `CA_Y` at the top of `TrustMAttest.sol`); if your chip's certificate names a different issuer (CA 300 is
+common on newer chips), put that CA's public key there and deploy. Infineon publishes the CA certificates in the
 [optiga-trust-m](https://github.com/Infineon/optiga-trust-m/tree/develop/certificates) repo (CA 300, root)
 and [pred-main-xmc4700-kit](https://github.com/Infineon/pred-main-xmc4700-kit/tree/master/amazon-freertos/vendors/infineon/secure_elements/optiga_trust_m/certificates) (CA 101).
 
@@ -138,7 +138,6 @@ firmware/lcd.py                        Pico-LCD-1.3 driver (ST7789 + keys)
 tools/chip.py                          Mac/Linux side: ui, sign, cert, uid, via mpremote
 packages/foundry/contracts/TrustMAttest.sol
 packages/foundry/test/TrustMAttest.t.sol   real cert, real signature, tamper cases
-packages/foundry/script/DeployTrustMAttest.s.sol   pins the CA 101 public key
 packages/nextjs/app/page.tsx           the page: ask the chip, verify, attest
 packages/nextjs/app/api/sign/          the queue the Pico polls (in memory, or Upstash)
 SKILL.md                               how an agent uses this

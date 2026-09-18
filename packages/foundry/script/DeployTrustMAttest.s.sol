@@ -4,13 +4,10 @@ pragma solidity ^0.8.24;
 import "./DeployHelpers.s.sol";
 import { TrustMAttest } from "../contracts/TrustMAttest.sol";
 
-/// Pins the public key of "Infineon OPTIGA(TM) Trust M CA 101", the CA that signed the factory certificate
-/// in our chip. Other chips may come from CA 300; read the cert's issuer (`tools/chip.py cert` prints it).
+/// The CA public key lives in the contract itself (TrustMAttest.CA_X / CA_Y). For a chip from another CA,
+/// change it there; `tools/chip.py cert` prints the cert's issuer.
 contract DeployTrustMAttest is ScaffoldETHDeploy {
-    bytes32 constant CA101_X = 0x97337734ad7423a14bf40fd4ee1d27af8ed05ae87970c74dfe29889b499ad2d0;
-    bytes32 constant CA101_Y = 0x1ea249ae7910f052c59d85514a8215e2d63e4730cdfb5cc153bbcc00a7e6408b;
-
     function run() external ScaffoldEthDeployerRunner {
-        new TrustMAttest(CA101_X, CA101_Y);
+        new TrustMAttest();
     }
 }

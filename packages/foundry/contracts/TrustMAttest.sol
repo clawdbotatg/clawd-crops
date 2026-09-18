@@ -7,7 +7,7 @@ import { P256 } from "@openzeppelin/contracts/utils/cryptography/P256.sol";
  * TrustMAttest: proves on chain that a P-256 public key lives inside a genuine Infineon OPTIGA Trust M.
  *
  *  Every Trust M ships with a factory key (slot E0F0) and an X.509 certificate for it (slot E0E0) signed by
- *  Infineon's "OPTIGA(TM) Trust M CA". The CA's public key is pinned here at deploy time. attest() takes the
+ *  Infineon's "OPTIGA(TM) Trust M CA 101". That CA's public key is hardcoded below. attest() takes the
  *  chip's certificate bytes, checks the CA signed its TBS part, pulls the chip's public key out of the signed
  *  bytes and records it. After that, isChipSignature() answers "was this hash signed by a real Trust M".
  *
@@ -25,8 +25,11 @@ contract TrustMAttest {
     // SEQUENCE { SEQUENCE { OID ecPublicKey, OID prime256v1 }, BIT STRING 0x04 || X || Y }
     bytes private constant P256_SPKI = hex"3059301306072a8648ce3d020106082a8648ce3d03010703420004";
 
-    bytes32 public immutable caX;
-    bytes32 public immutable caY;
+    // Infineon OPTIGA(TM) Trust M CA 101, the CA that signs Trust M factory certificates. Uncompressed P-256
+    // point from Infineon's published CA certificate. A chip whose cert names another CA (CA 300 is common on
+    // newer parts) needs a contract with that CA's key here.
+    bytes32 public constant CA_X = 0x97337734ad7423a14bf40fd4ee1d27af8ed05ae87970c74dfe29889b499ad2d0;
+    bytes32 public constant CA_Y = 0x1ea249ae7910f052c59d85514a8215e2d63e4730cdfb5cc153bbcc00a7e6408b;
 
     mapping(bytes32 keyId => bool) public attested;
 
@@ -35,11 +38,6 @@ contract TrustMAttest {
     error BadKeyOffset();
     error NotP256Key();
     error CertNotSignedByCA();
-
-    constructor(bytes32 _caX, bytes32 _caY) {
-        caX = _caX;
-        caY = _caY;
-    }
 
     function keyIdOf(bytes32 x, bytes32 y) public pure returns (bytes32) {
         return keccak256(abi.encode(x, y));
@@ -61,7 +59,7 @@ contract TrustMAttest {
         x = bytes32(cert[pkOffset + 27:pkOffset + 59]);
         y = bytes32(cert[pkOffset + 59:pkOffset + 91]);
         bytes32 h = sha256(cert[tbsStart:tbsStart + tbsLen]);
-        if (!P256.verify(h, r, lowS(s), caX, caY)) revert CertNotSignedByCA();
+        if (!P256.verify(h, r, lowS(s), CA_X, CA_Y)) revert CertNotSignedByCA();
         bytes32 id = keyIdOf(x, y);
         attested[id] = true;
         emit Attested(id, x, y);
