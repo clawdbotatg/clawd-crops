@@ -11,6 +11,7 @@
 # secrets.py on the board: WIFI_SSID, WIFI_PASS, TRUSTM_RELAY (the laptop running `yarn start`,
 # e.g. "http://192.168.68.63:3000").
 import gc
+import sys
 import time
 
 import network
@@ -120,10 +121,14 @@ def u256(n):
     return int(n).to_bytes(32, "big")
 
 
+def addr32(a):
+    """An address as a left-padded 32-byte abi word (MicroPython bytes has no rjust)."""
+    return b"\x00" * 12 + bytes.fromhex(a[2:])
+
+
 def harvest_digest(chain_id, contract, key_id, to, deadline, nonce):
     """keccak256(abi.encode(bytes32,uint256,address,bytes32,address,uint256,uint256)), same as Crops.sol."""
-    return keccak256(DOMAIN + u256(chain_id) + bytes.fromhex(contract[2:]).rjust(32, b"\x00") + key_id
-                     + bytes.fromhex(to[2:]).rjust(32, b"\x00") + u256(deadline) + u256(nonce))
+    return keccak256(DOMAIN + u256(chain_id) + addr32(contract) + key_id + addr32(to) + u256(deadline) + u256(nonce))
 
 
 def sign_it(digest):
@@ -231,6 +236,11 @@ def run():
                     time.sleep_ms(50)
                 continue
         except Exception as e:
+            try:
+                with open("error.log", "a") as f:                # the screen only has room for one line
+                    sys.print_exception(e, f)
+            except Exception:
+                pass
             idle(("err %s" % e)[:29], RED)
         gc.collect()
         time.sleep_ms(POLL_MS)
