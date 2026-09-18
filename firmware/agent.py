@@ -184,10 +184,10 @@ def handle_harvest(req):
     ui.d.center_text("waiting for the wallet tx", 190, YELLOW)
     ui.d.show()
     st = wait_verdict(rid)
-    if st and st["verdict"]:
-        farm.harvested(ui.d, st.get("tx"))
+    if st and st["verdict"] and st.get("tx"):         # harvested means a transaction, not just a verdict
+        farm.harvested(ui.d, st["tx"])
     else:
-        farm.failed(ui.d, (st or {}).get("error") or "no confirmation")
+        farm.failed(ui.d, (st or {}).get("error") or "wallet never sent the tx")
     refresh_field()
 
 

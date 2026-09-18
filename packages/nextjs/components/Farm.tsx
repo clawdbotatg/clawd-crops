@@ -22,6 +22,7 @@ type Field = {
   seenAt: number; // local ms when this answer arrived
 };
 type Pending = { id: string; deadline: number; nonce: number };
+type Signed = Pending & { r: `0x${string}`; s: `0x${string}` };
 
 const stageOf = (f: Field, now: number) => {
   if (!f.lastHarvest) return 5;
@@ -42,6 +43,7 @@ export const Farm = () => {
   const [nowMs, setNowMs] = useState(0);
   const [asking, setAsking] = useState<Pending | undefined>();
   const [error, setError] = useState("");
+  const [signed, setSigned] = useState<Signed | undefined>(); // the chip signed; the wallet has not sent yet
   const [lastTx, setLastTx] = useState<`0x${string}` | undefined>();
 
   // The device reports its chip to /api/farm; the page shows that chip's field.
@@ -99,20 +101,22 @@ export const Farm = () => {
 
   // A harvest the device started (A on the hat) shows up here as a signed request for this wallet: send it.
   useEffect(() => {
-    if (!address || asking) return;
+    if (!address || asking || signed) return;
     const t = setInterval(async () => {
       try {
         const r = await fetch(`/api/sign?to=${address}&signed=1`, { cache: "no-store" });
         const j = r.ok ? await r.json() : {};
         if (j.id && j.status === "signed" && !j.tx && j.verdict === undefined) {
-          setAsking({ id: j.id, deadline: j.deadline, nonce: j.nonce });
+          setSigned(prev =>
+            prev?.id === j.id ? prev : { id: j.id, deadline: j.deadline, nonce: j.nonce, r: j.r, s: j.s },
+          );
         }
       } catch {
         /* queue not reachable */
       }
     }, 3000);
     return () => clearInterval(t);
-  }, [address, asking]);
+  }, [address, asking, signed]);
 
   // Ask the device to sign a harvest for the connected wallet, then send it from that wallet.
   const harvest = async () => {
@@ -147,32 +151,45 @@ export const Farm = () => {
         done = true;
         clearInterval(t);
         setAsking(undefined);
-        try {
-          const tx = await writeContractAsync({
-            functionName: "harvest",
-            args: [field.chipX, field.chipY, address, BigInt(asking.deadline), j.r, j.s],
-          });
-          setLastTx(tx);
-          await fetch(`/api/sign/${asking.id}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ verdict: true, tx }),
-          });
-          notification.success("Harvested 5 CROPS");
-          load();
-        } catch (e) {
-          const msg = (e as Error).message.split("\n")[0].slice(0, 80);
-          setError(msg);
-          await fetch(`/api/sign/${asking.id}`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ verdict: false, error: msg }),
-          });
-        }
+        setSigned({ id: asking.id, deadline: asking.deadline, nonce: asking.nonce, r: j.r, s: j.s });
       }
     }, 1000);
     return () => clearInterval(t);
-  }, [asking, field, address, writeContractAsync]);
+  }, [asking, field, address]);
+
+  // The tap that sends it. A user gesture, so phone wallets open; a timer-fired request often does nothing.
+  const send = async () => {
+    if (!signed || !field || !address) return;
+    setError("");
+    try {
+      const tx = await writeContractAsync({
+        functionName: "harvest",
+        args: [field.chipX, field.chipY, address, BigInt(signed.deadline), signed.r, signed.s],
+      });
+      // SE-2 returns undefined instead of throwing when the wallet is on another chain or not ready
+      if (!tx) throw new Error("wallet did not send. Is it on Ethereum mainnet?");
+      setLastTx(tx);
+      setSigned(undefined);
+      await fetch(`/api/sign/${signed.id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ verdict: true, tx }),
+      });
+      notification.success("Harvested 5 CROPS");
+      load();
+    } catch (e) {
+      const msg = (e as Error).message.split("\n")[0].slice(0, 100);
+      setError(msg);
+      if (/rejected|denied/i.test(msg)) {
+        setSigned(undefined);
+        await fetch(`/api/sign/${signed.id}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ verdict: false, error: "rejected in the wallet" }),
+        });
+      }
+    }
+  };
 
   return (
     <section className="card bg-base-100 shadow w-full">
@@ -194,13 +211,23 @@ export const Farm = () => {
               </span>
               <span>{ready ? "ready to harvest" : `next harvest in ${countdown(field.nextHarvest - now)}`}</span>
             </div>
-            <button
-              className="btn btn-primary btn-lg"
-              disabled={!address || !ready || !!asking || isMining}
-              onClick={harvest}
-            >
-              {asking ? "press A on the device…" : isMining ? "sending…" : "Harvest 5 CROPS"}
-            </button>
+            {signed ? (
+              <>
+                <div className="alert alert-info">The chip signed. Now your wallet sends it.</div>
+                <button className="btn btn-primary btn-lg" disabled={isMining} onClick={send}>
+                  {isMining ? "sending…" : "Send harvest transaction"}
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-primary btn-lg"
+                disabled={!address || !ready || !!asking || isMining}
+                onClick={harvest}
+              >
+                {asking ? "press A on the device…" : "Harvest 5 CROPS"}
+              </button>
+            )}
+            {asking && <div className="alert">Sent to the device. Press A on it, then A again to sign.</div>}
             {address && ready && !asking && (
               <div className="text-sm opacity-70">
                 Or press A on the device. Either way your wallet sends the transaction.
