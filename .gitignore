@@ -24,3 +24,4 @@ dist
 
 # vercel link (deploy from the repo root, rootDirectory=packages/nextjs)
 .vercel
+__pycache__/

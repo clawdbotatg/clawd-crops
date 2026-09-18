@@ -23,6 +23,8 @@ export async function POST(req: Request, { params }: Params) {
     r.status = "refused";
   } else if (typeof body.verdict === "boolean") {
     r.verdict = body.verdict;
+    if (hex32(body.tx)) r.tx = body.tx;
+    if (typeof body.error === "string") r.error = body.error.slice(0, 80);
   } else if (hex32(body.r) && hex32(body.s) && hex32(body.chipX) && hex32(body.chipY)) {
     Object.assign(r, { status: "signed", r: body.r, s: body.s, chipX: body.chipX, chipY: body.chipY });
     try {

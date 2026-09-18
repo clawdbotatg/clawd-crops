@@ -125,7 +125,7 @@ def verdict(text, ok):
     _message(text, 30, 70)
     d.center_text("REAL CHIP" if ok else "REJECTED", 112, c, 3)
     d.center_text("TrustMAttest says %s" % ("true" if ok else "false"), 160, WHITE)
-    d.center_text("0xC868770a...bbe4AB99", 180, GREY)
+    d.center_text("0xA2b53f0c...dA1E197", 180, GREY)
     d.center_text("ethereum mainnet", 196, GREY)
     d.show()
 

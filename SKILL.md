@@ -19,8 +19,11 @@ description: Sign with an Infineon OPTIGA Trust M chip on a Pico and prove on ch
   request, signs on A, POSTs `{r,s,chipX,chipY}` to `/api/sign/<id>`, then polls for `verdict`. The queue is
   `packages/nextjs/app/api/sign` + `utils/signQueue.ts` (memory, or Upstash when the env vars are set).
   The board also carries `main_picowallet.py`, the previous boot file; swap them back to get picowallet.
-- `TrustMAttest` on mainnet at `0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99`. `attest(...)` once per
+- `TrustMAttest` on mainnet at `0xA2b53f0c5c700E42020d91a1c0E481389dA1E197`. `attest(...)` once per
   chip, `isChipSignature(x, y, hash, r, s)` any time.
+- `Crops` on mainnet at `0x3eA4e9306a0d0B4da674C965CBB4AD4a37afc6e2`: an attested chip harvests 5 CROPS every
+  5 hours with `harvest(x, y, to, deadline, r, s)`; the chip signs `harvestDigest(keyId, to, deadline, nonce)`
+  (DOMAIN + chainid + contract + to + deadline + nonce). The device builds that digest itself (`agent.py`).
 
 ## Rules that are not obvious
 
@@ -40,7 +43,7 @@ description: Sign with an Infineon OPTIGA Trust M chip on a Pico and prove on ch
 
 ```
 tools/chip.py sign "hello"    -> {hash, r, s, chipX, chipY}
-cast call 0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99 \
+cast call 0xA2b53f0c5c700E42020d91a1c0E481389dA1E197 \
   "isChipSignature(bytes32,bytes32,bytes32,bytes32,bytes32)(bool)" $chipX $chipY $hash $r $s \
   --rpc-url $MAINNET_RPC
 ```

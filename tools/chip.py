@@ -19,7 +19,7 @@ FIRMWARE = [os.path.join(HERE, "..", "firmware", f) for f in ("trustm.py", "lcd.
 FOUNDRY_ENV = os.path.join(HERE, "..", "packages", "foundry", ".env")
 SPKI = bytes.fromhex("3059301306072a8648ce3d020106082a8648ce3d03010703420004")
 N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
-CONTRACT = "0xC868770aFA2a7b7975c1a7d7Ec2fc979bbe4AB99"
+CONTRACT = "0xA2b53f0c5c700E42020d91a1c0E481389dA1E197"
 DAPP = "https://clawd-trust-m.vercel.app"
 
 
