@@ -1,9 +1,9 @@
 ---
-name: trust-m-attest
-description: Sign with an Infineon OPTIGA Trust M chip on a Pico and prove on chain that the signature came from real silicon. Use for "sign this with the chip", "is this signature from the chip", "attest a new Trust M", or any Trust M / IFX I2C question.
+name: clawd-crops
+description: CROPS, an ERC-20 a real Infineon Trust M chip harvests 5 of every 5 hours from a Pico + LCD hat; also signs and proves arbitrary messages. Use for "harvest", "crops field", "the device won't harvest", the harvest digest, or any Trust M / IFX I2C question in this repo.
 ---
 
-# Trust M attestation
+# clawd-crops: Trust M + CROPS
 
 ## What you have
 

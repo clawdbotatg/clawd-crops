@@ -138,7 +138,7 @@ const Home: NextPage = () => {
   return (
     <div className="flex flex-col items-center grow pt-10 px-5 gap-8 max-w-3xl mx-auto w-full">
       <div className="text-center">
-        <h1 className="text-4xl font-bold">Did a real chip sign this?</h1>
+        <h1 className="text-4xl font-bold">Crops, grown by a real chip</h1>
         <p className="mt-3">
           An Infineon OPTIGA Trust M holds a key that never leaves the silicon. Infineon signed a certificate for that
           key at the factory. A contract on Ethereum mainnet holds Infineon&apos;s CA key, has checked that certificate,
