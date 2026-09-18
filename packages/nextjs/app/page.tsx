@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Address } from "@scaffold-ui/components";
 import type { NextPage } from "next";
 import { encodeAbiParameters, keccak256 } from "viem";
 import deployedContracts from "~~/contracts/deployedContracts";
@@ -142,17 +143,9 @@ const Home: NextPage = () => {
           key at the factory. A contract on Ethereum mainnet holds Infineon&apos;s CA key, has checked that certificate,
           and now answers one question about any signature: did this chip make it?
         </p>
-        <div className="mt-2 text-sm">
-          Contract:{" "}
-          <a
-            className="link font-mono"
-            href={`https://etherscan.io/address/${CONTRACT}#code`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {CONTRACT}
-          </a>{" "}
-          on Ethereum mainnet
+        <div className="flex justify-center items-center gap-2 mt-2 text-sm">
+          <span>Contract:</span>
+          <Address address={CONTRACT} />
         </div>
       </div>
 
