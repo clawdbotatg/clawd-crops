@@ -11,7 +11,7 @@ harvest(bytes32 x, bytes32 y, address to, uint256 deadline, bytes32 r, bytes32 s
 
 Checks, in order:
 
-1. `attest.attested(keyIdOf(x, y))` on the existing TrustMAttest at `0xC868…AB99`. Only real chips.
+1. `attest.attested(keyIdOf(x, y))` on TrustMAttest (redeployed together with Crops, CA key hardcoded). Only real chips.
 2. `block.timestamp <= deadline`.
 3. `block.timestamp >= lastHarvest[keyId] + 5 hours`.
 4. `P256.verify(digest, r, lowS(s), x, y)` where
@@ -22,25 +22,26 @@ Checks, in order:
 
 Then `nonce++`, `lastHarvest = now`, `_mint(to, 5e18)`, `emit Harvest(keyId, to, n)`.
 
-Nonce makes each signature one-time. Deadline stops a relayer from sitting on one. The cooldown is per chip
-key, not per address, so one chip cannot farm with many addresses. Anyone can call `harvest`; the caller pays
-gas, the chip's signature decides who gets the tokens.
+Nonce makes each signature one-time. Deadline stops anyone sitting on one. The cooldown is per chip key, not
+per address, so one chip cannot farm with many addresses. Anyone can call `harvest`; msg.sender only pays gas.
+The tokens go to the `to` inside the signed digest, so a front-runner who copies the calldata just pays for
+the real user's harvest, and one who swaps `to` fails the signature check.
 
 Views for the UI: `nextHarvest(keyId)`, `nonce(keyId)`, `balanceOf(to)`.
 
-Tests: Foundry's `vm.signP256` gives us a P-256 key we control. Crops takes the attest contract as an
-interface, so tests use a stub that says the test key is attested. Cases: happy path, second harvest inside 5 h
-reverts, after 5 h works, replay reverts on nonce, past deadline reverts, wrong `to` in the digest reverts,
-unattested key reverts.
+Tests (`test/Crops.t.sol`, 9 cases, passing): `vm.signP256` gives a P-256 key we control and a stub says it
+is attested. Mint goes to `to` not the sender; second harvest inside 5 h reverts; after 5 h works, even to a
+different wallet; the same signature cannot be replayed once the cooldown is over (nonce); expired deadline;
+front-runner swapping `to`; unattested key; a signature made for another Crops deployment; high-s folding.
 
-Stays on mainnet next to the attest contract. About 90k gas per harvest. Base would be cheaper; say so if you
-want it there instead (then TrustMAttest is redeployed there too and the chip re-attested).
+Mainnet. About 90k gas per harvest. `script/Deploy.s.sol` deploys TrustMAttest and Crops together.
+Deployer: keystore `crops-deployer`, `0xCf3aF6ed70e62F3dB51E4483A9306502a8C51ac0`, needs ~0.01 ETH.
 
-## Relayer
+## No relayer
 
-The laptop app (the same `yarn start` that runs the queue) sends the `harvest` tx from a throwaway key in
-`packages/nextjs/.env.local` as `RELAYER_PRIVATE_KEY`, funded with a little ETH. Gitignored, never printed,
-never committed. If the key is missing, the page falls back to "send with your wallet" through RainbowKit.
+The user connects a wallet on the page. That address is `to`. The page sends a harvest request to the device
+carrying `to`; the device shows it and signs after A; the page gets the signature back and the user sends
+`harvest(...)` from their own wallet. Anyone could send it, the outcome is the same.
 
 ## Device (`firmware/farm.py`, replaces `agent.py` as the boot loop)
 
@@ -69,10 +70,8 @@ never committed. If the key is missing, the page falls back to "send with your w
 4. Page: farm card, `to` input, history.
 5. README, SKILL.
 
-## Decisions needed
+## Decided (2026-09-17)
 
-- Deployer keystore for mainnet.
-- `to` address to start with.
-- OK to fund a fresh relayer key on the laptop with ~0.02 ETH, or wallet-in-browser only?
-- Keep TrustMAttest at `0xC868…AB99` (recommended, chip already attested) or redeploy the hardcoded version and
-  re-attest.
+- Mainnet. Fresh deploy of both contracts for consistency; the chip gets re-attested on the new registry.
+- `to` = the wallet connected on the page, shown on the device before signing.
+- No relayer. The user's wallet sends the harvest tx.
