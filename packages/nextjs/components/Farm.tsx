@@ -36,6 +36,7 @@ const countdown = (s: number) => {
   return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s % 60).padStart(2, "0")}s`;
 };
 const short = (h: string) => `${h.slice(0, 10)}…${h.slice(-6)}`;
+const OFFLINE_S = 10; // the device polls every second; quiet this long means it is not running
 
 export const Farm = () => {
   const { address } = useAccount();
@@ -45,6 +46,7 @@ export const Farm = () => {
   const [error, setError] = useState("");
   const [signed, setSigned] = useState<Signed | undefined>(); // the chip signed; the wallet has not sent yet
   const [lastTx, setLastTx] = useState<`0x${string}` | undefined>();
+  const [seenAgo, setSeenAgo] = useState<number | null | undefined>(); // undefined until the first ping answers
 
   // The device reports its chip to /api/farm; the page shows that chip's field.
   const load = async () => {
@@ -58,15 +60,28 @@ export const Farm = () => {
       /* the queue is only there when yarn start runs on the laptop */
     }
   };
+  // The device polls the server every second. If the server has not heard from it, say so instead of "press A".
+  const ping = async () => {
+    try {
+      const r = await fetch("/api/farm?ping=1", { cache: "no-store" });
+      if (r.ok) setSeenAgo((await r.json()).deviceSeenAgo ?? null);
+    } catch {
+      /* same as load */
+    }
+  };
   useEffect(() => {
     load();
+    ping();
     const a = setInterval(load, 30000);
     const b = setInterval(() => setNowMs(Date.now()), 1000);
+    const c = setInterval(ping, 3000);
     return () => {
       clearInterval(a);
       clearInterval(b);
+      clearInterval(c);
     };
   }, []);
+  const offline = seenAgo === null || (typeof seenAgo === "number" && seenAgo > OFFLINE_S);
 
   const { data: balance } = useScaffoldReadContract({
     contractName: "Crops",
@@ -211,6 +226,13 @@ export const Farm = () => {
               </span>
               <span>{ready ? "ready to harvest" : `next harvest in ${countdown(field.nextHarvest - now)}`}</span>
             </div>
+            {offline && (
+              <div className="alert alert-warning">
+                Device offline:{" "}
+                {seenAgo === null ? "it has not talked to this server yet" : `last seen ${seenAgo}s ago`}. Power-cycle
+                the Pico or run <code>tools/flash.sh</code>. Harvest waits until it is back.
+              </div>
+            )}
             {signed ? (
               <>
                 <div className="alert alert-info">The chip signed. Now your wallet sends it.</div>
@@ -221,13 +243,15 @@ export const Farm = () => {
             ) : (
               <button
                 className="btn btn-primary btn-lg"
-                disabled={!address || !ready || !!asking || isMining}
+                disabled={!address || !ready || !!asking || isMining || offline}
                 onClick={harvest}
               >
                 {asking ? "press A on the device…" : "Harvest 5 CROPS"}
               </button>
             )}
-            {asking && <div className="alert">Sent to the device. Press A on it, then A again to sign.</div>}
+            {asking && !offline && (
+              <div className="alert">Sent to the device. Press A on it, then A again to sign.</div>
+            )}
             {address && ready && !asking && (
               <div className="text-sm opacity-70">
                 Or press A on the device. Either way your wallet sends the transaction.

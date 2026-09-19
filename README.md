@@ -56,7 +56,8 @@ yarn install && yarn start        # the page + the queue the device polls, on a 
 ```
 
 On the Pico: MicroPython, then `secrets.py` with `WIFI_SSID`, `WIFI_PASS` and
-`TRUSTM_RELAY = "http://<laptop ip>:3000"`, then `mpremote cp firmware/*.py :`. `main.py` runs `agent.py`. Wire
+`TRUSTM_RELAY = "http://<laptop ip>:3000"`, then `tools/flash.sh` (copies `firmware/*.py` and resets; any bare
+`mpremote` command stops the running agent until a reset, so always use the script). `main.py` runs `agent.py`. Wire
 the Trust M to GP4 (SDA) / GP5 (SCL), 3V3, GND; the hat takes the rest of the pins.
 
 Open `http://<laptop ip>:3000` (a phone on the same WiFi works), connect the wallet that should get the CROPS,

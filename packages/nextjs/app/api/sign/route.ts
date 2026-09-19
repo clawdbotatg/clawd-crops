@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { keccak256, stringToBytes } from "viem";
 import { harvestFields } from "~~/utils/crops";
+import { deviceBusy, deviceSeen } from "~~/utils/device";
 import { latestSignedHarvest, pending, put } from "~~/utils/signQueue";
 
 export const dynamic = "force-dynamic";
@@ -44,8 +45,10 @@ export async function GET(req: Request) {
     const r = await latestSignedHarvest(u.searchParams.get("to") ?? "");
     return NextResponse.json(r ?? {});
   }
+  deviceSeen(); // only the Pico polls this
   const r = await pending();
   if (!r) return NextResponse.json({});
+  deviceBusy(300_000); // it now shows the request and waits for A (ui.run timeout_ms in the firmware)
   const { id, kind, message, hash, to, deadline, nonce, chainId, contract } = r;
   return NextResponse.json({ id, kind, message, hash, to, deadline, nonce, chainId, contract });
 }

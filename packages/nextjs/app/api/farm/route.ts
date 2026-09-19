@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { CROPS_DEPLOYED, fieldState } from "~~/utils/crops";
+import { deviceSeen, deviceSeenAgo } from "~~/utils/device";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +17,11 @@ export async function POST(req: Request) {
 
 // GET ?x=&y=: the contract's clock for one chip (the device asks, and is remembered).
 // GET with no params: the same for the last chip that asked (the page).
+// GET ?ping=1: {deviceSeenAgo} only, no chain read (the page polls this to show the device offline).
 export async function GET(req: Request) {
-  if (!CROPS_DEPLOYED) return NextResponse.json({ error: "Crops is not deployed yet" }, { status: 503 });
   const u = new URL(req.url);
+  if (u.searchParams.get("ping")) return NextResponse.json({ deviceSeenAgo: deviceSeenAgo() });
+  if (!CROPS_DEPLOYED) return NextResponse.json({ error: "Crops is not deployed yet" }, { status: 503 });
   let x = u.searchParams.get("x"),
     y = u.searchParams.get("y");
   if (x && y) {
@@ -26,11 +29,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "x and y: the chip's public key" }, { status: 400 });
     }
     g.__trustmChip = { x: x as `0x${string}`, y: y as `0x${string}` };
+    deviceSeen();
   } else if (g.__trustmChip) {
     ({ x, y } = g.__trustmChip);
   } else {
     return NextResponse.json({});
   }
   const f = await fieldState(x as `0x${string}`, y as `0x${string}`);
-  return NextResponse.json({ chipX: x, chipY: y, to: g.__trustmWallet ?? null, ...f });
+  return NextResponse.json({ chipX: x, chipY: y, to: g.__trustmWallet ?? null, deviceSeenAgo: deviceSeenAgo(), ...f });
 }

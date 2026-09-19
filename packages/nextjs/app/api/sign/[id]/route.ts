@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { deviceBusy, deviceIdle, deviceSeen } from "~~/utils/device";
 import { get, put } from "~~/utils/signQueue";
 import { isChipSignature } from "~~/utils/verifyOnChain";
 
@@ -21,12 +22,15 @@ export async function POST(req: Request, { params }: Params) {
   const body = (await req.json()) as Record<string, unknown>;
   if (body.refused === true) {
     r.status = "refused";
+    deviceSeen();
   } else if (typeof body.verdict === "boolean") {
+    deviceIdle(); // the page's verdict releases the device; it goes back to polling
     r.verdict = body.verdict;
     if (hex32(body.tx)) r.tx = body.tx;
     if (typeof body.error === "string") r.error = body.error.slice(0, 80);
   } else if (hex32(body.r) && hex32(body.s) && hex32(body.chipX) && hex32(body.chipY)) {
     Object.assign(r, { status: "signed", r: body.r, s: body.s, chipX: body.chipX, chipY: body.chipY });
+    deviceBusy(180_000); // it now waits for the verdict (VERDICT_WAIT_MS in the firmware)
     if (r.kind === "sign") {
       // the sign demo's verdict is a mainnet read; a harvest's verdict is the wallet's tx, posted by the page later
       try {
